@@ -9,8 +9,10 @@ from pytube import YouTube  # Thư viện để tải video từ YouTube
 from moviepy.editor import VideoFileClip  # Thư viện để xử lý video
 from threading import Thread  # Thư viện để xử lý đa luồng
 from tkinter import filedialog
-
 from PIL import Image, ImageTk  # Thư viện để làm việc với hình ảnh
+
+
+
 
 # Khởi tạo pygame để phát âm thanh
 pygame.init()
@@ -20,11 +22,13 @@ window = tk.Tk()
 window.title("Trình Tải Nhạc từ YouTube")
 window.geometry("400x300")
 
+
 # Hàm để làm sạch tên tệp (xóa ký tự đặc biệt không hợp lệ)
 def sanitize_filename(filename):
     sanitized_filename = "".join([c for c in filename if c.isalnum() or c.isspace()])
     sanitized_filename = sanitized_filename.replace(" ", "_")
     return sanitized_filename
+
 
 # Hàm để tải về và chuyển đổi video từ YouTube thành âm thanh
 def download_and_convert_video(youtube_url, output_directory):
@@ -32,17 +36,23 @@ def download_and_convert_video(youtube_url, output_directory):
         yt = YouTube(youtube_url, on_progress_callback=None, on_complete_callback=None)
         video_title = yt.title
         sanitized_title = sanitize_filename(video_title)
-        stream = yt.streams.get_highest_resolution()
+        
+        # Sử dụng phiên bản video có độ phân giải thấp hơn để giảm dung lượng
+        stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").first()
+        
         temp_video_directory = "temp_video"
         if not os.path.exists(temp_video_directory):
             os.makedirs(temp_video_directory)
         video_filename = f"{sanitized_title}.mp4"
         video_path = os.path.join(temp_video_directory, video_filename)
         stream.download(output_path=temp_video_directory, filename=video_filename)
+        
+        # Chuyển đổi video sang định dạng nén MP3 và giảm bit rate
         video = VideoFileClip(video_path)
         audio = video.audio
-        output_audio_path = os.path.join(output_directory, f"{sanitized_title}.wav")
-        audio.write_audiofile(output_audio_path)
+        output_audio_path = os.path.join(output_directory, f"{sanitized_title}.mp3")
+        audio.write_audiofile(output_audio_path, codec='mp3', bitrate='64k')
+        
         video.close()
         audio.close()
         os.remove(video_path)
@@ -56,13 +66,14 @@ def download_and_convert_video(youtube_url, output_directory):
         print(f"Đã xảy ra lỗi: {str(e)}")
         return None
 
+
 # Hàm để phát âm thanh
 def play_audio(audio_path):
     global current_audio_path
     current_audio_path = audio_path
-
     def play_thread():
         pygame.mixer.music.load(audio_path)
+        pygame.mixer.music.set_volume(current_volume)  # Đặt âm lượng khi phát âm thanh
         pygame.mixer.music.play()
         # Lấy thời lượng của bài hát và cài đặt nó cho thanh trượt tiến trình
         audio = pygame.mixer.Sound(audio_path)
@@ -71,9 +82,9 @@ def play_audio(audio_path):
         while pygame.mixer.music.get_busy():
             window.update()
             continue
-
     audio_thread = Thread(target=play_thread)
     audio_thread.start()
+
 
 # Hàm để mở video YouTube trong trình duyệt web
 def open_youtube_video():
@@ -81,10 +92,10 @@ def open_youtube_video():
     url = f"https://www.youtube.com/results?search_query={search_query}"
     webbrowser.open(url)
 
+
 # Hàm để tải về và phát âm thanh từ YouTube
 def download_and_play_audio():
     youtube_url = url_entry.get()
-
     def download_and_play():
         download_directory = filedialog.askdirectory(title="Chọn thư mục lưu trữ")
         if download_directory:
@@ -92,14 +103,12 @@ def download_and_play_audio():
             if audio_path:
                 play_audio(audio_path)
                 update_progress()  # Bắt đầu cập nhật thanh trượt tiến trình khi bắt đầu phát
-
     audio_thread = Thread(target=download_and_play)
     audio_thread.start()
 
 # Hàm để phát âm nhạc ngẫu nhiên từ danh sách phát
 def play_random_music():
     global current_song_index
-
     if playlist:
         current_song_index = random.randint(0, len(playlist) - 1)
         audio_path = playlist[current_song_index]
@@ -118,17 +127,20 @@ def update_progress():
     if pygame.mixer.music.get_busy():
         window.after(1000, update_progress)
 
+
 # Hàm được gọi khi người dùng thả thanh trượt tiến trình
 def on_progress_scale_release(event):
     current_time = progress_scale.get()
     pygame.mixer.music.rewind()
     pygame.mixer.music.set_pos(current_time)
 
+
 # Hàm để thêm âm nhạc vào danh sách phát
 def add_music_to_playlist():
     file_paths = filedialog.askopenfilenames(title="Chọn nhiều bài hát")
     if file_paths:
         playlist.extend(file_paths)
+
 
 # Hàm để tạo mã QR từ nội dung tùy chỉnh
 def generate_qr_code():
@@ -145,8 +157,10 @@ def generate_qr_code():
     qr_label.image = qr_img
     qr_label.pack()
 
+
 # Biến toàn cục để theo dõi bài hát hiện tại trong danh sách phát
 current_song_index = 0
+
 
 # Hàm để phát bài hát tiếp theo trong danh sách phát
 def play_next_song():
@@ -160,6 +174,7 @@ def play_next_song():
         current_music_label.config(text="Bài hát: " + os.path.basename(audio_path))
         progress_scale.set(0)  # Đặt thanh trượt về vị trí ban đầu
         on_progress_scale_release(None)  # Đặt thời gian bắt đầu bài hát
+
 
 # Biến toàn cục để theo dõi trạng thái tạm dừng
 is_paused = False
@@ -175,64 +190,105 @@ def pause_resume_music():
             pygame.mixer.music.pause()
             is_paused = True
             pause_button.config(text="Tiếp Tục")
+            pause_resume_music()
+
+
+# Tạo biến toàn cục để lưu trữ âm lượng hiện tại
+current_volume = 0.5  # Giá trị mặc định có thể thay đổi
+
+
+# Hàm để cập nhật âm lượng âm thanh dựa trên giá trị của thanh điều chỉnh
+def update_volume():
+    global current_volume
+    current_volume = volume_scale.get()
+    pygame.mixer.music.set_volume(current_volume)
+    window.after(100, update_volume)
 
 
 # Tạo một khung cho phần YouTube
 youtube_frame = ttk.Frame(window)
 youtube_frame.pack()
 
+
 # Nhập nội dung tùy chỉnh cho mã QR
 qr_entry = ttk.Entry(youtube_frame, width=40)
 qr_entry.grid(column=0, row=0)
+
 
 # Nút để tạo và hiển thị mã QR
 generate_qr_button = ttk.Button(youtube_frame, text="Tạo QR", command=generate_qr_code)
 generate_qr_button.grid(column=1, row=0)
 
+
 # Nhập tìm kiếm YouTube
 entry = ttk.Entry(youtube_frame, width=40)
 entry.grid(column=0, row=1)
+
 
 # Nút để tìm kiếm YouTube
 search_button = ttk.Button(youtube_frame, text="Tìm kiếm YouTube", command=open_youtube_video)
 search_button.grid(column=1, row=1)
 
+
 # Nhập URL YouTube
 url_entry = ttk.Entry(youtube_frame, width=40)
 url_entry.grid(column=0, row=2)
+
 
 # Nút để tải về và phát âm thanh từ YouTube
 download_button = ttk.Button(youtube_frame, text="Tải MP3", command=download_and_play_audio)
 download_button.grid(column=1, row=2)
 
+
 # Tạo khung cho trình phát âm nhạc
 music_frame = ttk.Frame(window)
 music_frame.pack()
+
 
 # Nút để phát âm nhạc ngẫu nhiên
 play_button = ttk.Button(music_frame, text="Phát Nhạc Ngẫu Nhiên", command=play_random_music)
 play_button.pack()
 
+
 # Nhãn để hiển thị âm nhạc hiện tại
 current_music_label = ttk.Label(music_frame, text="Bài hát: ")
 current_music_label.pack()
+
 
 # Thanh trượt tiến trình
 progress_scale = ttk.Scale(music_frame, orient="horizontal", length=300)
 progress_scale.bind("<ButtonRelease-1>", on_progress_scale_release)
 progress_scale.pack()
 
+
 # Nút để chuyển đến bài hát tiếp theo
 next_song_button = ttk.Button(music_frame, text="Bài Hát Tiếp Theo", command=play_next_song)
 next_song_button.pack()
+
 
 # Nút để tạm dừng hoặc tiếp tục bài hát
 pause_button = ttk.Button(music_frame, text="Tạm Dừng", command=pause_resume_music)
 pause_button.pack()
 
+
 # Nút để thêm âm nhạc vào danh sách phát
 add_music_button = ttk.Button(music_frame, text="Thêm Bài Hát", command=add_music_to_playlist)
 add_music_button.pack()
+
+
+# Thêm thanh hiển thị âm lượng
+volume_label = ttk.Label(music_frame, text="Âm Lượng:")
+volume_label.pack()
+
+
+# Thêm thanh điều chỉnh âm lượng
+volume_scale = ttk.Scale(music_frame, from_=0, to=1, orient="horizontal", length=100, variable=current_volume)
+volume_scale.pack()
+
+
+# Gọi hàm cập nhật âm lượng
+update_volume()
+
 
 # Tạo danh sách phát để lưu trữ các bài hát đã tải về
 playlist = []
